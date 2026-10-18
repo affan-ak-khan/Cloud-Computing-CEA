@@ -1,0 +1,22 @@
+services:
+  web:
+    image: ghcr.io/${GHCR_OWNER}/ctm-web:${TAG:-latest}
+    ports:
+      - "80:80"          # the only published port
+    depends_on:
+      - api
+    restart: always
+
+  api:
+    image: ghcr.io/${GHCR_OWNER}/ctm-api:${TAG:-latest}
+    # No "ports:" entry, so the API is reachable only from the web container
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SSL: ${DB_SSL:-true}
+    restart: always
