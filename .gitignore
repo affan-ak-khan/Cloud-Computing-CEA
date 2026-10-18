@@ -1,0 +1,12 @@
+﻿node_modules/
+.env
+.env.*
+!.env.example
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+coverage/
+dist/
+npm-debug.log*
+.DS_Store
