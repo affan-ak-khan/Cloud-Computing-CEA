@@ -18,7 +18,7 @@ function errorHandler(err, req, res, next) {
     return res.status(400).json({ error: 'Invalid JSON body' });
   }
   // Log only the message, never credentials; send a generic response
-  console.error('Unhandled error:', err.message);
+  console.error('Unhandled error:', err.name, err.code || '', err.message || '');
   return res.status(500).json({ error: 'Internal server error' });
 }
 
