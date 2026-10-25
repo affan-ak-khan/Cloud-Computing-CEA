@@ -1,0 +1,83 @@
+#!/bin/bash
+set -euo pipefail
+
+dnf install -y docker postgresql15
+systemctl enable --now docker
+
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+mkdir -p /opt/ctm
+
+cat > /opt/ctm/docker-compose.yml <<'EOF'
+services:
+  web:
+    image: ghcr.io/$${GHCR_OWNER}/ctm-web:$${TAG}
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: always
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${region}
+        awslogs-group: /${project}/app
+        awslogs-stream-prefix: web
+  api:
+    image: ghcr.io/$${GHCR_OWNER}/ctm-api:$${TAG}
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DB_HOST: $${DB_HOST}
+      DB_PORT: $${DB_PORT}
+      DB_NAME: $${DB_NAME}
+      DB_USER: $${DB_USER}
+      DB_PASSWORD: $${DB_PASSWORD}
+      DB_SSL: $${DB_SSL}
+    restart: always
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${region}
+        awslogs-group: /${project}/app
+        awslogs-stream-prefix: api
+EOF
+
+cat > /opt/ctm/schema.sql <<'EOF'
+${schema}
+EOF
+
+cat > /opt/ctm/deploy.sh <<'EOF'
+#!/bin/bash
+set -euo pipefail
+cd /opt/ctm
+get() { aws ssm get-parameter --region ${region} --name "/${project}/$1" --with-decryption --query Parameter.Value --output text; }
+umask 077
+cat > .env <<ENVEOF
+GHCR_OWNER=$(get ghcr_owner)
+TAG=$(get image_tag)
+DB_HOST=$(get db_host)
+DB_PORT=5432
+DB_NAME=$(get db_name)
+DB_USER=$(get db_user)
+DB_PASSWORD=$(get db_password)
+DB_SSL=true
+ENVEOF
+docker compose pull
+docker compose up -d --remove-orphans
+EOF
+chmod +x /opt/ctm/deploy.sh
+
+get() { aws ssm get-parameter --region ${region} --name "/${project}/$1" --with-decryption --query Parameter.Value --output text; }
+export PGPASSWORD="$(get db_password)"
+for i in $(seq 1 30); do
+  if psql "host=$(get db_host) port=5432 dbname=$(get db_name) user=$(get db_user) sslmode=require" -v ON_ERROR_STOP=1 -f /opt/ctm/schema.sql; then
+    break
+  fi
+  sleep 10
+done
+unset PGPASSWORD
+
+/opt/ctm/deploy.sh
