@@ -73,4 +73,60 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.OWNER }}/ctm-web:${{ github.sha }}
             ${{ env.REGISTRY }}/${{ env.OWNER }}/ctm-web:latest
 
-  # deploy job gets added in the AWS phase
+  deploy:
+    needs: build_and_push
+    # Runs only after the AWS variables are configured (after terraform apply)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWS_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    concurrency: deploy
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: ap-south-1
+    steps:
+      - name: Configure AWS credentials (OIDC, no stored keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Record the image tag to deploy
+        run: |
+          aws ssm put-parameter --name /ctm/image_tag --type String \
+            --value "${{ github.sha }}" --overwrite
+
+      - name: Run the deploy script on the instances
+        id: send
+        run: |
+          CMD_ID=$(aws ssm send-command \
+            --document-name AWS-RunShellScript \
+            --targets "Key=tag:app,Values=ctm" \
+            --parameters 'commands=["/opt/ctm/deploy.sh"]' \
+            --comment "deploy ${GITHUB_SHA}" \
+            --query Command.CommandId --output text)
+          echo "command_id=$CMD_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for every instance to finish
+        run: |
+          CMD_ID="${{ steps.send.outputs.command_id }}"
+          sleep 10
+          IDS=$(aws ssm list-command-invocations --command-id "$CMD_ID" \
+            --query 'CommandInvocations[].InstanceId' --output text)
+          if [ -z "$IDS" ]; then echo "No instances received the command"; exit 1; fi
+          for ID in $IDS; do
+            aws ssm wait command-executed --command-id "$CMD_ID" --instance-id "$ID"
+          done
+
+      - name: Health check through the load balancer
+        run: |
+          BASE="http://${{ vars.ALB_DNS_NAME }}"
+          for i in $(seq 1 20); do
+            H=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/health" || true)
+            A=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/tasks" || true)
+            echo "health=$H api=$A"
+            if [ "$H" = "200" ] && [ "$A" = "200" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "Health check failed"
+          exit 1
