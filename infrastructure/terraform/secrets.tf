@@ -58,3 +58,9 @@ resource "aws_ssm_parameter" "image_tag" {
     ignore_changes = [value]
   }
 }
+
+variable "github_subject" {
+  description = "OIDC subject GitHub sends for pushes to main (now includes immutable owner and repo IDs)"
+  type        = string
+  default     = "repo:affan-ak-khan@166368968/Cloud-Computing-CEA@1424313777:ref:refs/heads/main"
+}
