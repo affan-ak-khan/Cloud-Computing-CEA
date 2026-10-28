@@ -24,7 +24,7 @@ services:
       options:
         awslogs-region: ${region}
         awslogs-group: /${project}/app
-        awslogs-stream-prefix: web
+        tag: "{{.Name}}/{{.ID}}"
   api:
     image: ghcr.io/$${GHCR_OWNER}/ctm-api:$${TAG}
     environment:
@@ -42,7 +42,7 @@ services:
       options:
         awslogs-region: ${region}
         awslogs-group: /${project}/app
-        awslogs-stream-prefix: api
+        tag: "{{.Name}}/{{.ID}}"
 EOF
 
 cat > /opt/ctm/schema.sql <<'EOF'
