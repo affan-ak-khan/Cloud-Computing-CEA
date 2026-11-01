@@ -7,17 +7,29 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main class="card">
-    <h1>Cloud Task Manager</h1>
+  <main class="container">
+    <header class="header">
+      <div>
+        <h1>Cloud Task Manager</h1>
+        <p id="summary" class="summary"></p>
+      </div>
+      <div class="progress" aria-hidden="true"><div id="progress-bar"></div></div>
+    </header>
 
     <form id="task-form" autocomplete="off">
       <input id="task-input" type="text" maxlength="200"
              placeholder="What needs doing?" required />
-      <button type="submit">Add</button>
+      <button type="submit">+ Add task</button>
     </form>
 
+    <nav class="filters" role="tablist">
+      <button type="button" class="filter active" data-filter="all">All</button>
+      <button type="button" class="filter" data-filter="active">Active</button>
+      <button type="button" class="filter" data-filter="done">Done</button>
+    </nav>
+
     <p id="status" role="status" aria-live="polite"></p>
-    <ul id="task-list"></ul>
+    <ul id="task-list" class="grid"></ul>
   </main>
   <script src="app.js"></script>
 </body>
